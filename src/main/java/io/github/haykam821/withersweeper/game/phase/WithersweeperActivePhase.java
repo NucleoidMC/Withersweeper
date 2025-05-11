@@ -145,7 +145,7 @@ public class WithersweeperActivePhase {
 	}
 
 	private boolean isModifyingFlags(PlayerEntity player) {
-		return player.getInventory().selectedSlot == 8;
+		return player.getInventory().getSelectedSlot() == 8;
 	}
 
 	private ItemStackBuilder getFlagStackBuilder() {
