@@ -1,20 +1,20 @@
 package io.github.haykam821.withersweeper.game.field;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.text.Text;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.network.chat.Component;
 
 public class NumberField extends Field {
 	private static final BlockState[] VALUES_TO_STATES = new BlockState[] {
-		Blocks.WHITE_WOOL.getDefaultState(),
-		Blocks.BLUE_WOOL.getDefaultState(),
-		Blocks.GREEN_WOOL.getDefaultState(),
-		Blocks.RED_WOOL.getDefaultState(),
-		Blocks.LIGHT_BLUE_WOOL.getDefaultState(),
-		Blocks.BROWN_WOOL.getDefaultState(),
-		Blocks.CYAN_WOOL.getDefaultState(),
-		Blocks.BLACK_WOOL.getDefaultState(),
-		Blocks.LIGHT_GRAY_WOOL.getDefaultState()
+		Blocks.WOOL.white().defaultBlockState(),
+		Blocks.WOOL.blue().defaultBlockState(),
+		Blocks.WOOL.green().defaultBlockState(),
+		Blocks.WOOL.red().defaultBlockState(),
+		Blocks.WOOL.lightBlue().defaultBlockState(),
+		Blocks.WOOL.brown().defaultBlockState(),
+		Blocks.WOOL.cyan().defaultBlockState(),
+		Blocks.WOOL.black().defaultBlockState(),
+		Blocks.WOOL.lightGray().defaultBlockState()
 	};
 
 	private int value = 0;
@@ -44,8 +44,8 @@ public class NumberField extends Field {
 	}
 
 	@Override
-	public Text getInfoMessage() {
-		return Text.translatable("text.withersweeper.info.number" + (this.value == 1 ? "" : ".plural"), this.value);
+	public Component getInfoMessage() {
+		return Component.translatable("text.withersweeper.info.number" + (this.value == 1 ? "" : ".plural"), this.value);
 	}
 
 	public NumberField increaseValue() {

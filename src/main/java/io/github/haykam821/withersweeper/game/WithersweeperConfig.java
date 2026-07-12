@@ -8,10 +8,12 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 import io.github.haykam821.withersweeper.game.board.BoardConfig;
 import net.minecraft.SharedConstants;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.util.math.intprovider.ConstantIntProvider;
-import net.minecraft.util.math.intprovider.IntProvider;
+import net.minecraft.util.valueproviders.IntProviders;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
+import net.minecraft.world.item.Items;
+import net.minecraft.util.valueproviders.ConstantInt;
+import net.minecraft.util.valueproviders.IntProvider;
 import xyz.nucleoid.plasmid.api.game.GameSpace;
 import xyz.nucleoid.plasmid.api.game.common.config.WaitingLobbyConfig;
 import xyz.nucleoid.plasmid.api.game.stats.GameStatisticBundle;
@@ -21,9 +23,9 @@ public class WithersweeperConfig {
 		return instance.group(
 			BoardConfig.CODEC.fieldOf("board").forGetter(WithersweeperConfig::getBoardConfig),
 			WaitingLobbyConfig.CODEC.fieldOf("players").forGetter(WithersweeperConfig::getPlayerConfig),
-			IntProvider.NON_NEGATIVE_CODEC.optionalFieldOf("ticks_until_close", ConstantIntProvider.create(SharedConstants.TICKS_PER_SECOND * 5)).forGetter(WithersweeperConfig::getTicksUntilClose),
+			IntProviders.NON_NEGATIVE_CODEC.optionalFieldOf("ticks_until_close", ConstantInt.of(SharedConstants.TICKS_PER_SECOND * 5)).forGetter(WithersweeperConfig::getTicksUntilClose),
 			GameStatisticBundle.NAMESPACE_CODEC.optionalFieldOf("statistic_bundle_namespace").forGetter(WithersweeperConfig::getStatisticBundleNamespace),
-			ItemStack.CODEC.optionalFieldOf("flag_stack", new ItemStack(Items.RED_BANNER)).forGetter(WithersweeperConfig::getFlagStack),
+			ItemStackTemplate.CODEC.optionalFieldOf("flag_stack", new ItemStackTemplate(Items.BANNER.red())).forGetter(WithersweeperConfig::getFlagStack),
 			Codec.INT.optionalFieldOf("max_mistakes", 1).forGetter(WithersweeperConfig::getMaxMistakes)
 		).apply(instance, WithersweeperConfig::new);
 	});
@@ -32,10 +34,10 @@ public class WithersweeperConfig {
 	private final WaitingLobbyConfig playerConfig;
 	private final IntProvider ticksUntilClose;
 	private final Optional<String> statisticBundleNamespace;
-	private final ItemStack flagStack;
+	private final ItemStackTemplate flagStack;
 	private final int maxMistakes;
 
-	public WithersweeperConfig(BoardConfig boardConfig, WaitingLobbyConfig playerConfig, IntProvider ticksUntilClose, Optional<String> statisticBundleNamespace, ItemStack flagStack, int maxMistakes) {
+	public WithersweeperConfig(BoardConfig boardConfig, WaitingLobbyConfig playerConfig, IntProvider ticksUntilClose, Optional<String> statisticBundleNamespace, ItemStackTemplate flagStack, int maxMistakes) {
 		this.boardConfig = boardConfig;
 		this.playerConfig = playerConfig;
 		this.ticksUntilClose = ticksUntilClose;
@@ -67,7 +69,7 @@ public class WithersweeperConfig {
 		return gameSpace.getStatistics().bundle(this.statisticBundleNamespace.get());
 	}
 
-	public ItemStack getFlagStack() {
+	public ItemStackTemplate getFlagStack() {
 		return this.flagStack;
 	}
 

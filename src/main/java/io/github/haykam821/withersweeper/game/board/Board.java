@@ -4,9 +4,9 @@ import io.github.haykam821.withersweeper.game.field.Field;
 import io.github.haykam821.withersweeper.game.field.FieldVisibility;
 import io.github.haykam821.withersweeper.game.field.MineField;
 import io.github.haykam821.withersweeper.game.field.NumberField;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.world.WorldAccess;
+import net.minecraft.core.BlockPos;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.LevelAccessor;
 import xyz.nucleoid.map_templates.MapTemplate;
 
 public class Board {
@@ -36,7 +36,7 @@ public class Board {
 		return true;
 	}
 
-	public boolean placeMines(int avoidX, int avoidZ, Random random) {
+	public boolean placeMines(int avoidX, int avoidZ, RandomSource random) {
 		if (this.placedMines) {
 			return false;
 		}
@@ -125,7 +125,7 @@ public class Board {
 	}
 
 	public void build(MapTemplate template) {
-		BlockPos.Mutable pos = new BlockPos.Mutable();
+		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
 		for (int x = 0; x < this.config.x; x++) {
 			for (int z = 0; z < this.config.z; z++) {
@@ -139,8 +139,8 @@ public class Board {
 		}
 	}
 
-	public void build(WorldAccess world) {
-		BlockPos.Mutable pos = new BlockPos.Mutable();
+	public void build(LevelAccessor level) {
+		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
 		for (int x = 0; x < this.config.x; x++) {
 			for (int z = 0; z < this.config.z; z++) {
@@ -148,7 +148,7 @@ public class Board {
 
 				Field field = this.getField(x, z);
 				if (field != null) {
-					world.setBlockState(pos, field.getCoveredBlockState(), 2);
+					level.setBlock(pos, field.getCoveredBlockState(), 2);
 				}
 			}
 		}

@@ -2,16 +2,16 @@ package io.github.haykam821.withersweeper.game.field;
 
 import io.github.haykam821.withersweeper.Main;
 import io.github.haykam821.withersweeper.game.phase.WithersweeperActivePhase;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.network.chat.Component;
+import net.minecraft.core.BlockPos;
 import xyz.nucleoid.plasmid.api.game.stats.StatisticMap;
 
 public class MineField extends Field {
-	private static final BlockState STATE = Blocks.TNT.getDefaultState();
-	private static final Text INFO_MESSAGE = Text.translatable("text.withersweeper.info.mine");
+	private static final BlockState STATE = Blocks.TNT.defaultBlockState();
+	private static final Component INFO_MESSAGE = Component.translatable("text.withersweeper.info.mine");
 
 	@Override
 	public boolean isCompleted() {
@@ -19,7 +19,7 @@ public class MineField extends Field {
 	}
 
 	@Override
-	public void uncover(BlockPos pos, ServerPlayerEntity uncoverer, WithersweeperActivePhase phase) {
+	public void uncover(BlockPos pos, ServerPlayer uncoverer, WithersweeperActivePhase phase) {
 		super.uncover(pos, uncoverer, phase);
 
 		StatisticMap statistics = phase.getStatisticsForPlayer(uncoverer);
@@ -36,7 +36,7 @@ public class MineField extends Field {
 	}
 
 	@Override
-	public Text getInfoMessage() {
+	public Component getInfoMessage() {
 		return INFO_MESSAGE;
 	}
 }

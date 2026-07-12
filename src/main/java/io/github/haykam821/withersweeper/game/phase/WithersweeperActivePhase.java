@@ -7,24 +7,27 @@ import io.github.haykam821.withersweeper.game.WithersweeperConfig;
 import io.github.haykam821.withersweeper.game.board.Board;
 import io.github.haykam821.withersweeper.game.field.Field;
 import io.github.haykam821.withersweeper.game.field.FieldVisibility;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.GameMode;
+import io.github.haykam821.withersweeper.game.field.NumberField;
+import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.ChatFormatting;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.GameType;
 import xyz.nucleoid.plasmid.api.game.GameActivity;
 import xyz.nucleoid.plasmid.api.game.GameCloseReason;
 import xyz.nucleoid.plasmid.api.game.GameSpace;
@@ -39,13 +42,14 @@ import xyz.nucleoid.plasmid.api.game.stats.StatisticKeys;
 import xyz.nucleoid.plasmid.api.game.stats.StatisticMap;
 import xyz.nucleoid.plasmid.api.util.ItemStackBuilder;
 import xyz.nucleoid.plasmid.api.util.PlayerRef;
+import xyz.nucleoid.plasmid.api.util.PlayerUtil;
 import xyz.nucleoid.stimuli.event.EventResult;
 import xyz.nucleoid.stimuli.event.block.BlockUseEvent;
 import xyz.nucleoid.stimuli.event.item.ItemThrowEvent;
 import xyz.nucleoid.stimuli.event.player.PlayerDeathEvent;
 
 public class WithersweeperActivePhase {
-	private final ServerWorld world;
+	private final ServerLevel level;
 	public final GameSpace gameSpace;
 	private final WithersweeperConfig config;
 	private final Board board;
@@ -56,17 +60,17 @@ public class WithersweeperActivePhase {
 
 	private int ticksUntilClose = -1;
 
-	public WithersweeperActivePhase(GameSpace gameSpace, ServerWorld world, WithersweeperConfig config, Board board) {
-		this.world = world;
+	public WithersweeperActivePhase(GameSpace gameSpace, ServerLevel level, WithersweeperConfig config, Board board) {
+		this.level = level;
 		this.gameSpace = gameSpace;
 		this.config = config;
 		this.board = board;
 		this.statistics = config.getStatisticBundle(gameSpace);
 	}
 
-	public static void open(GameSpace gameSpace, ServerWorld world, WithersweeperConfig config, Board board) {
+	public static void open(GameSpace gameSpace, ServerLevel level, WithersweeperConfig config, Board board) {
 		gameSpace.setActivity(activity -> {
-			WithersweeperActivePhase phase = new WithersweeperActivePhase(gameSpace, world, config, board);
+			WithersweeperActivePhase phase = new WithersweeperActivePhase(gameSpace, level, config, board);
 
 			// Rules
 			WithersweeperActivePhase.setRules(activity);
@@ -110,29 +114,30 @@ public class WithersweeperActivePhase {
 
 		this.timeElapsed += 1;
 
-		for (ServerPlayerEntity player : this.gameSpace.getPlayers()) {
+		for (ServerPlayer player : this.gameSpace.getPlayers()) {
 			if (player.getY() < 0) {
 				this.spawn(player);
 			}
 		}
 	}
 
-	private Text getMistakeText(PlayerEntity causer) {
-		Text displayName = causer.getDisplayName();
+	private Component getMistakeText(Player causer) {
+		Component displayName = causer.getDisplayName();
 
 		if (this.config.getMaxMistakes() <= 1) {
-			return Text.translatable("text.withersweeper.reveal_mine", displayName).formatted(Formatting.RED);
+			return Component.translatable("text.withersweeper.reveal_mine", displayName).withStyle(ChatFormatting.RED);
 		} else {
-			return Text.translatable("text.withersweeper.reveal_mine.max_mistakes", displayName, this.config.getMaxMistakes()).formatted(Formatting.RED);
+			return Component.translatable("text.withersweeper.reveal_mine.max_mistakes", displayName, this.config.getMaxMistakes()).withStyle(ChatFormatting.RED);
 		}
 	}
 
-	private void checkMistakes(PlayerEntity causer) {
+	private void checkMistakes(Player causer) {
 		if (this.mistakes < this.config.getMaxMistakes()) return;
 
-		Text text = this.getMistakeText(causer);
-		for (PlayerEntity player : this.gameSpace.getPlayers()) {
-			player.sendMessage(text, false);
+		Component text = this.getMistakeText(causer);
+		for (ServerPlayer player : this.gameSpace.getPlayers()) {
+			player.sendSystemMessage(text, false);
+			PlayerUtil.playSoundToPlayer(player, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 1, 1);
 		}
 
 		if (this.statistics != null) {
@@ -144,48 +149,48 @@ public class WithersweeperActivePhase {
 		this.endGame();
 	}
 
-	private boolean isModifyingFlags(PlayerEntity player) {
-		return player.getInventory().selectedSlot == 8;
+	private boolean isModifyingFlags(Player player) {
+		return player.getInventory().getSelectedSlot() == 8;
 	}
 
 	private ItemStackBuilder getFlagStackBuilder() {
-		return ItemStackBuilder.of(this.config.getFlagStack())
-			.addLore(Text.translatable("text.withersweeper.flag_description.line1").formatted(Formatting.GRAY))
-			.addLore(Text.translatable("text.withersweeper.flag_description.line2").formatted(Formatting.GRAY))
-			.set(DataComponentTypes.MAX_STACK_SIZE, Item.MAX_MAX_COUNT)
+		return ItemStackBuilder.of(this.config.getFlagStack().create())
+			.addLore(Component.translatable("text.withersweeper.flag_description.line1").withStyle(ChatFormatting.GRAY))
+			.addLore(Component.translatable("text.withersweeper.flag_description.line2").withStyle(ChatFormatting.GRAY))
+			.set(DataComponents.MAX_STACK_SIZE, Item.ABSOLUTE_MAX_STACK_SIZE)
 			.setCount(this.board.getRemainingFlags());
 	}
 
-	private void setFlagSlot(ServerPlayerEntity player, ItemStack stack) {
-		player.getInventory().setStack(8, stack);
+	private void setFlagSlot(ServerPlayer player, ItemStack stack) {
+		player.getInventory().setItem(8, stack);
 
 		// Update inventory
-		player.currentScreenHandler.sendContentUpdates();
-		player.playerScreenHandler.onContentChanged(player.getInventory());
+		player.containerMenu.broadcastChanges();
+		player.inventoryMenu.slotsChanged(player.getInventory());
 	}
 
 	private void updateFlagCount() {
 		ItemStackBuilder flagStackBuilder = this.getFlagStackBuilder();
 
-		for (ServerPlayerEntity player : this.gameSpace.getPlayers()) {
+		for (ServerPlayer player : this.gameSpace.getPlayers()) {
 			this.setFlagSlot(player, flagStackBuilder.build());
 		}
 	}
 
-	private EventResult modifyField(ServerPlayerEntity uncoverer, BlockPos pos, Field field) {
+	private EventResult modifyField(ServerPlayer uncoverer, BlockPos pos, Field field) {
 		if (this.isModifyingFlags(uncoverer) && field.getVisibility() != FieldVisibility.UNCOVERED) {
 			if (field.getVisibility() == FieldVisibility.FLAGGED) {
 				field.setVisibility(FieldVisibility.COVERED);
-				this.world.playSound(null, pos, SoundEvents.ENTITY_ITEM_FRAME_REMOVE_ITEM, SoundCategory.BLOCKS, 1, 1);
+				this.level.playSound(null, pos, SoundEvents.ITEM_FRAME_REMOVE_ITEM, SoundSource.BLOCKS, 1, 1);
 			} else {
 				field.setVisibility(FieldVisibility.FLAGGED);
-				this.world.playSound(null, pos, SoundEvents.ENTITY_ITEM_FRAME_ADD_ITEM, SoundCategory.BLOCKS, 1, 1);
+				this.level.playSound(null, pos, SoundEvents.ITEM_FRAME_ADD_ITEM, SoundSource.BLOCKS, 1, 1);
 			}
 
 			return EventResult.ALLOW;
 		} else if (field.getVisibility() == FieldVisibility.COVERED) {
 			field.uncover(pos, uncoverer, this);
-			this.world.playSound(null, pos, SoundEvents.BLOCK_SAND_BREAK, SoundCategory.BLOCKS, 0.5f, 1);
+			this.level.playSound(null, pos, SoundEvents.SAND_BREAK, SoundSource.BLOCKS, 0.5f, 1);
 
 			return EventResult.ALLOW;
 		}
@@ -193,22 +198,22 @@ public class WithersweeperActivePhase {
 		return EventResult.PASS;
 	}
 
-	private void addParticipant(ServerPlayerEntity player) {
+	private void addParticipant(ServerPlayer player) {
 		PlayerRef participant = PlayerRef.of(player);
 		if (this.participants.add(participant) && this.statistics != null) {
 			this.statistics.forPlayer(participant).increment(StatisticKeys.GAMES_PLAYED, 1);
 		}
 	}
 
-	private ActionResult useBlock(ServerPlayerEntity uncoverer, Hand hand, BlockHitResult hitResult) {
-		if (this.isGameEnding()) return ActionResult.PASS;
-		if (hand != Hand.MAIN_HAND) return ActionResult.PASS;
+	private InteractionResult useBlock(ServerPlayer uncoverer, InteractionHand hand, BlockHitResult hitResult) {
+		if (this.isGameEnding()) return InteractionResult.PASS;
+		if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
 
 		BlockPos pos = hitResult.getBlockPos();
-		if (pos.getY() != 0) return ActionResult.PASS;
-		if (!this.board.isValidPos(pos.getX(), pos.getZ())) return ActionResult.PASS;
+		if (pos.getY() != 0) return InteractionResult.PASS;
+		if (!this.board.isValidPos(pos.getX(), pos.getZ())) return InteractionResult.PASS;
 
-		this.board.placeMines(pos.getX(), pos.getZ(), this.world.getRandom());
+		this.board.placeMines(pos.getX(), pos.getZ(), this.level.getRandom());
 
 		Field field = this.board.getField(pos.getX(), pos.getZ());
 		EventResult result = this.modifyField(uncoverer, pos, field);
@@ -217,13 +222,14 @@ public class WithersweeperActivePhase {
 			this.addParticipant(uncoverer);
 
 			this.checkMistakes(uncoverer);
-			this.board.build(this.world);
+			this.board.build(this.level);
 			this.updateFlagCount();
 
 			if (this.board.isCompleted()) {
-				Text text = Text.translatable("text.withersweeper.complete", this.timeElapsed / 20).formatted(Formatting.GOLD);
-				for (PlayerEntity player : this.gameSpace.getPlayers()) {
-					player.sendMessage(text, false);
+				Component text = Component.translatable("text.withersweeper.complete", this.timeElapsed / 20).withStyle(ChatFormatting.GOLD);
+				for (ServerPlayer player : this.gameSpace.getPlayers()) {
+					player.sendSystemMessage(text, false);
+					PlayerUtil.playSoundToPlayer(player, SoundEvents.PLAYER_LEVELUP, SoundSource.UI, 1, 1);
 				}
 
 				if (this.statistics != null) {
@@ -241,32 +247,32 @@ public class WithersweeperActivePhase {
 	}
 
 	private JoinAcceptorResult onAcceptPlayers(JoinAcceptor acceptor) {
-		return acceptor.teleport(this.world, WithersweeperActivePhase.getSpawnPos(this.config)).thenRunForEach(player -> {
-			player.changeGameMode(GameMode.ADVENTURE);
+		return acceptor.teleport(this.level, WithersweeperActivePhase.getSpawnPos(this.config)).thenRunForEach(player -> {
+			player.setGameMode(GameType.ADVENTURE);
 			this.setFlagSlot(player, this.getFlagStackBuilder().build());
 		});
 	}
 
-	private EventResult onPlayerDeath(ServerPlayerEntity player, DamageSource source) {
+	private EventResult onPlayerDeath(ServerPlayer player, DamageSource source) {
 		// Respawn player
 		this.spawn(player);
 		return EventResult.DENY;
 	}
 
-	private boolean attemptToSendInfoMessage(PlayerEntity player, BlockPos pos) {
+	private boolean attemptToSendInfoMessage(ServerPlayer player, BlockPos pos) {
 		if (pos.getY() != 0) return false;
 		if (!this.board.isValidPos(pos.getX(), pos.getZ())) return false;
 
 		Field field = this.board.getField(pos.getX(), pos.getZ());
 
-		Text message = field.getCoveredInfoMessage().copy().formatted(Formatting.DARK_PURPLE);
-		player.sendMessage(message, true);
+		Component message = field.getCoveredInfoMessage().copy().withStyle(ChatFormatting.DARK_PURPLE);
+		player.sendSystemMessage(message, true);
 
 		return true;
 	}
 
-	private EventResult onThrowItem(PlayerEntity player, int slot, ItemStack stack) {
-		HitResult hit = player.raycast(8, 0, false);
+	private EventResult onThrowItem(ServerPlayer player, int slot, ItemStack stack) {
+		HitResult hit = player.pick(8, 0, false);
 		if (hit.getType() == HitResult.Type.BLOCK) {
 			this.attemptToSendInfoMessage(player, ((BlockHitResult) hit).getBlockPos());
 		}
@@ -274,7 +280,7 @@ public class WithersweeperActivePhase {
 		return EventResult.DENY;
 	}
 
-	public StatisticMap getStatisticsForPlayer(ServerPlayerEntity player) {
+	public StatisticMap getStatisticsForPlayer(ServerPlayer player) {
 		if (this.statistics == null) {
 			return null;
 		}
@@ -285,24 +291,24 @@ public class WithersweeperActivePhase {
 		return this.board;
 	}
 
-	private void spawn(ServerPlayerEntity player) {
-		WithersweeperActivePhase.spawn(player, this.world, this.config);
+	private void spawn(ServerPlayer player) {
+		WithersweeperActivePhase.spawn(player, this.level, this.config);
 	}
 
 	private void endGame() {
-		this.ticksUntilClose = this.config.getTicksUntilClose().get(this.world.getRandom());
+		this.ticksUntilClose = this.config.getTicksUntilClose().sample(this.level.getRandom());
 	}
 
 	private boolean isGameEnding() {
 		return this.ticksUntilClose >= 0;
 	}
 
-	protected static void spawn(ServerPlayerEntity player, ServerWorld world, WithersweeperConfig config) {
-		Vec3d spawnPos = WithersweeperActivePhase.getSpawnPos(config);
-		player.teleport(world, spawnPos.getX(), spawnPos.getY(), spawnPos.getZ(), Set.of(), 0, 0, true);
+	protected static void spawn(ServerPlayer player, ServerLevel level, WithersweeperConfig config) {
+		Vec3 spawnPos = WithersweeperActivePhase.getSpawnPos(config);
+		player.teleportTo(level, spawnPos.x(), spawnPos.y(), spawnPos.z(), Set.of(), 0, 0, true);
 	}
 
-	protected static Vec3d getSpawnPos(WithersweeperConfig config) {
-		return new Vec3d(config.getBoardConfig().x / 2d, 1, config.getBoardConfig().x / 2d);
+	protected static Vec3 getSpawnPos(WithersweeperConfig config) {
+		return new Vec3(config.getBoardConfig().x / 2d, 1, config.getBoardConfig().x / 2d);
 	}
 }

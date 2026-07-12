@@ -2,11 +2,11 @@ package io.github.haykam821.withersweeper.game.phase;
 
 import io.github.haykam821.withersweeper.game.WithersweeperConfig;
 import io.github.haykam821.withersweeper.game.board.Board;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.GameMode;
-import xyz.nucleoid.fantasy.RuntimeWorldConfig;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.GameType;
+import xyz.nucleoid.fantasy.RuntimeLevelConfig;
 import xyz.nucleoid.map_templates.MapTemplate;
 import xyz.nucleoid.plasmid.api.game.GameOpenContext;
 import xyz.nucleoid.plasmid.api.game.GameOpenProcedure;
@@ -15,21 +15,21 @@ import xyz.nucleoid.plasmid.api.game.GameSpace;
 import xyz.nucleoid.plasmid.api.game.common.GameWaitingLobby;
 import xyz.nucleoid.plasmid.api.game.event.GameActivityEvents;
 import xyz.nucleoid.plasmid.api.game.event.GamePlayerEvents;
+import xyz.nucleoid.plasmid.api.game.level.generator.TemplateChunkGenerator;
 import xyz.nucleoid.plasmid.api.game.player.JoinAcceptor;
 import xyz.nucleoid.plasmid.api.game.player.JoinAcceptorResult;
 import xyz.nucleoid.plasmid.api.game.player.JoinOffer;
-import xyz.nucleoid.plasmid.api.game.world.generator.TemplateChunkGenerator;
 import xyz.nucleoid.stimuli.event.EventResult;
 import xyz.nucleoid.stimuli.event.player.PlayerDeathEvent;
 
 public class WithersweeperWaitingPhase {
-	private final ServerWorld world;
+	private final ServerLevel level;
 	public final GameSpace gameSpace;
 	private final WithersweeperConfig config;
 	private final Board board;
 
-	public WithersweeperWaitingPhase(GameSpace gameSpace, ServerWorld world, WithersweeperConfig config, Board board) {
-		this.world = world;
+	public WithersweeperWaitingPhase(GameSpace gameSpace, ServerLevel level, WithersweeperConfig config, Board board) {
+		this.level = level;
 		this.gameSpace = gameSpace;
 		this.config = config;
 		this.board = board;
@@ -39,11 +39,11 @@ public class WithersweeperWaitingPhase {
 		Board board = new Board(context.config().getBoardConfig());
 		MapTemplate template = board.buildFromTemplate();
 
-		RuntimeWorldConfig worldConfig = new RuntimeWorldConfig()
+		RuntimeLevelConfig levelConfig = new RuntimeLevelConfig()
 			.setGenerator(new TemplateChunkGenerator(context.server(), template));
 
-		return context.openWithWorld(worldConfig, (activity, world) -> {
-			WithersweeperWaitingPhase phase = new WithersweeperWaitingPhase(activity.getGameSpace(), world, context.config(), board);
+		return context.openWithLevel(levelConfig, (activity, level) -> {
+			WithersweeperWaitingPhase phase = new WithersweeperWaitingPhase(activity.getGameSpace(), level, context.config(), board);
 			GameWaitingLobby.addTo(activity, context.config().getPlayerConfig());
 
 			// Rules
@@ -60,7 +60,7 @@ public class WithersweeperWaitingPhase {
 	}
 
 	private void tick() {
-		for (ServerPlayerEntity player : this.gameSpace.getPlayers()) {
+		for (ServerPlayer player : this.gameSpace.getPlayers()) {
 			if (player.getY() < 0) {
 				this.spawn(player);
 			}
@@ -68,27 +68,27 @@ public class WithersweeperWaitingPhase {
 	}
 
 	private JoinAcceptorResult onAcceptPlayers(JoinAcceptor acceptor) {
-		return acceptor.teleport(this.world, WithersweeperActivePhase.getSpawnPos(this.config)).thenRunForEach(player -> {
-			player.changeGameMode(GameMode.ADVENTURE);
+		return acceptor.teleport(this.level, WithersweeperActivePhase.getSpawnPos(this.config)).thenRunForEach(player -> {
+			player.setGameMode(GameType.ADVENTURE);
 		});
 	}
 
 	private GameResult requestStart() {
-		WithersweeperActivePhase.open(this.gameSpace, this.world, this.config, this.board);
+		WithersweeperActivePhase.open(this.gameSpace, this.level, this.config, this.board);
 		return GameResult.ok();
 	}
 
-	private void addPlayer(ServerPlayerEntity player) {
+	private void addPlayer(ServerPlayer player) {
 		this.spawn(player);
 	}
 
-	private EventResult onPlayerDeath(ServerPlayerEntity player, DamageSource source) {
+	private EventResult onPlayerDeath(ServerPlayer player, DamageSource source) {
 		// Respawn player
 		this.spawn(player);
 		return EventResult.DENY;
 	}
 
-	private void spawn(ServerPlayerEntity player) {
-		WithersweeperActivePhase.spawn(player, this.world, this.config);
+	private void spawn(ServerPlayer player) {
+		WithersweeperActivePhase.spawn(player, this.level, this.config);
 	}
 }
