@@ -69,7 +69,7 @@ public class WithersweeperWaitingPhase {
 
 	private JoinAcceptorResult onAcceptPlayers(JoinAcceptor acceptor) {
 		return acceptor.teleport(this.level, WithersweeperActivePhase.getSpawnPos(this.config)).thenRunForEach(player -> {
-			player.setGameMode(GameType.ADVENTURE);
+			player.setGameMode(GameType.SURVIVAL);
 		});
 	}
 

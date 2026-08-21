@@ -7,13 +7,9 @@ import io.github.haykam821.withersweeper.game.WithersweeperConfig;
 import io.github.haykam821.withersweeper.game.board.Board;
 import io.github.haykam821.withersweeper.game.field.Field;
 import io.github.haykam821.withersweeper.game.field.FieldVisibility;
-import io.github.haykam821.withersweeper.game.field.NumberField;
-import net.minecraft.core.Holder;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
+import net.minecraft.core.Direction;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
@@ -40,10 +36,10 @@ import xyz.nucleoid.plasmid.api.game.rule.GameRuleType;
 import xyz.nucleoid.plasmid.api.game.stats.GameStatisticBundle;
 import xyz.nucleoid.plasmid.api.game.stats.StatisticKeys;
 import xyz.nucleoid.plasmid.api.game.stats.StatisticMap;
-import xyz.nucleoid.plasmid.api.util.ItemStackBuilder;
 import xyz.nucleoid.plasmid.api.util.PlayerRef;
 import xyz.nucleoid.plasmid.api.util.PlayerUtil;
 import xyz.nucleoid.stimuli.event.EventResult;
+import xyz.nucleoid.stimuli.event.block.BlockPunchEvent;
 import xyz.nucleoid.stimuli.event.block.BlockUseEvent;
 import xyz.nucleoid.stimuli.event.item.ItemThrowEvent;
 import xyz.nucleoid.stimuli.event.player.PlayerDeathEvent;
@@ -82,7 +78,8 @@ public class WithersweeperActivePhase {
 			activity.listen(GamePlayerEvents.ACCEPT, phase::onAcceptPlayers);
 			activity.listen(GamePlayerEvents.OFFER, JoinOffer::accept);
 			activity.listen(PlayerDeathEvent.EVENT, phase::onPlayerDeath);
-			activity.listen(BlockUseEvent.EVENT, phase::useBlock);
+			activity.listen(BlockPunchEvent.EVENT, phase::onPunchBlock);
+			activity.listen(BlockUseEvent.EVENT, phase::onUseBlock);
 		});
 	}
 
@@ -95,6 +92,7 @@ public class WithersweeperActivePhase {
 		activity.deny(GameRuleType.MODIFY_INVENTORY);
 		activity.deny(GameRuleType.PORTALS);
 		activity.deny(GameRuleType.PVP);
+		activity.deny(GameRuleType.BREAK_BLOCKS);
 	}
 
 	private void enable() {
@@ -149,36 +147,18 @@ public class WithersweeperActivePhase {
 		this.endGame();
 	}
 
-	private boolean isModifyingFlags(Player player) {
-		return player.getInventory().getSelectedSlot() == 8;
-	}
-
-	private ItemStackBuilder getFlagStackBuilder() {
-		return ItemStackBuilder.of(this.config.getFlagStack().create())
-			.addLore(Component.translatable("text.withersweeper.flag_description.line1").withStyle(ChatFormatting.GRAY))
-			.addLore(Component.translatable("text.withersweeper.flag_description.line2").withStyle(ChatFormatting.GRAY))
-			.set(DataComponents.MAX_STACK_SIZE, Item.ABSOLUTE_MAX_STACK_SIZE)
-			.setCount(this.board.getRemainingFlags());
-	}
-
-	private void setFlagSlot(ServerPlayer player, ItemStack stack) {
-		player.getInventory().setItem(8, stack);
-
-		// Update inventory
-		player.containerMenu.broadcastChanges();
-		player.inventoryMenu.slotsChanged(player.getInventory());
-	}
-
 	private void updateFlagCount() {
-		ItemStackBuilder flagStackBuilder = this.getFlagStackBuilder();
+		int remainingFlags = Math.max(this.board.getRemainingFlags(), 0);
+		float experienceProgress = 1F - (float) remainingFlags / this.config.getBoardConfig().mines;
 
 		for (ServerPlayer player : this.gameSpace.getPlayers()) {
-			this.setFlagSlot(player, flagStackBuilder.build());
+			player.setExperienceLevels(remainingFlags);
+			player.experienceProgress = experienceProgress;
 		}
 	}
 
-	private EventResult modifyField(ServerPlayer uncoverer, BlockPos pos, Field field) {
-		if (this.isModifyingFlags(uncoverer) && field.getVisibility() != FieldVisibility.UNCOVERED) {
+	private EventResult modifyFlag(ServerPlayer uncoverer, BlockPos pos, Field field) {
+		if (field.getVisibility() != FieldVisibility.UNCOVERED) {
 			if (field.getVisibility() == FieldVisibility.FLAGGED) {
 				field.setVisibility(FieldVisibility.COVERED);
 				this.level.playSound(null, pos, SoundEvents.ITEM_FRAME_REMOVE_ITEM, SoundSource.BLOCKS, 1, 1);
@@ -188,13 +168,19 @@ public class WithersweeperActivePhase {
 			}
 
 			return EventResult.ALLOW;
-		} else if (field.getVisibility() == FieldVisibility.COVERED) {
+		}
+
+		return EventResult.PASS;
+	}
+
+	private EventResult uncoverField(ServerPlayer uncoverer, BlockPos pos, Field field) {
+		if (field.getVisibility() == FieldVisibility.COVERED) {
 			field.uncover(pos, uncoverer, this);
 			this.level.playSound(null, pos, SoundEvents.SAND_BREAK, SoundSource.BLOCKS, 0.5f, 1);
 
 			return EventResult.ALLOW;
 		}
-			
+
 		return EventResult.PASS;
 	}
 
@@ -205,18 +191,29 @@ public class WithersweeperActivePhase {
 		}
 	}
 
-	private InteractionResult useBlock(ServerPlayer uncoverer, InteractionHand hand, BlockHitResult hitResult) {
-		if (this.isGameEnding()) return InteractionResult.PASS;
-		if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
+	private EventResult onPunchBlock(ServerPlayer player, Direction direction, BlockPos pos) {
+		this.modifyField(player, true, pos);
+		return EventResult.DENY;
+	}
 
-		BlockPos pos = hitResult.getBlockPos();
-		if (pos.getY() != 0) return InteractionResult.PASS;
-		if (!this.board.isValidPos(pos.getX(), pos.getZ())) return InteractionResult.PASS;
+	private InteractionResult onUseBlock(ServerPlayer player, InteractionHand hand, BlockHitResult hitResult) {
+		if (hand == InteractionHand.MAIN_HAND) {
+			return this.modifyField(player, false, hitResult.getBlockPos()).asActionResult();
+		}
+
+		return InteractionResult.FAIL;
+	}
+
+	private EventResult modifyField(ServerPlayer uncoverer, boolean uncover, BlockPos pos) {
+		if (this.isGameEnding()) return EventResult.PASS;
+
+		if (pos.getY() != 0) return EventResult.PASS;
+		if (!this.board.isValidPos(pos.getX(), pos.getZ())) return EventResult.PASS;
 
 		this.board.placeMines(pos.getX(), pos.getZ(), this.level.getRandom());
 
 		Field field = this.board.getField(pos.getX(), pos.getZ());
-		EventResult result = this.modifyField(uncoverer, pos, field);
+		EventResult result = uncover ? this.uncoverField(uncoverer, pos, field) : this.modifyFlag(uncoverer, pos, field);
 
 		if (result == EventResult.ALLOW) {
 			this.addParticipant(uncoverer);
@@ -243,13 +240,12 @@ public class WithersweeperActivePhase {
 			}
 		}
 
-		return result.asActionResult();
+		return result;
 	}
 
 	private JoinAcceptorResult onAcceptPlayers(JoinAcceptor acceptor) {
 		return acceptor.teleport(this.level, WithersweeperActivePhase.getSpawnPos(this.config)).thenRunForEach(player -> {
-			player.setGameMode(GameType.ADVENTURE);
-			this.setFlagSlot(player, this.getFlagStackBuilder().build());
+			player.setGameMode(GameType.SURVIVAL);
 		});
 	}
 
