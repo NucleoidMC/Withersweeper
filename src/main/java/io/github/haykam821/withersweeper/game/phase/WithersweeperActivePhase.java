@@ -135,6 +135,7 @@ public class WithersweeperActivePhase {
 		if (this.mistakes < this.config.getMaxMistakes()) return;
 
 		Component text = this.getMistakeText(causer);
+		this.board.uncoverMines();
 		for (ServerPlayer player : this.gameSpace.getPlayers()) {
 			player.sendSystemMessage(text, false);
 			PlayerUtil.playSoundToPlayer(player, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 1, 1);
