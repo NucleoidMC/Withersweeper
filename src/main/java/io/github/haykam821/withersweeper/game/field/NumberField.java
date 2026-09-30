@@ -1,8 +1,18 @@
 package io.github.haykam821.withersweeper.game.field;
 
+import com.mojang.math.Transformation;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.phys.Vec3;
+import org.joml.*;
+
+import java.lang.Math;
 
 public class NumberField extends Field {
 	private static final BlockState[] VALUES_TO_STATES = new BlockState[] {
@@ -18,7 +28,7 @@ public class NumberField extends Field {
 	};
 
 	private int value = 0;
-
+	private boolean hasDisplay = false;
 	public NumberField(FieldVisibility visibility, int value) {
 		super(visibility);
 
@@ -31,6 +41,21 @@ public class NumberField extends Field {
 
 	public NumberField(int value) {
 		this(FieldVisibility.COVERED, value);
+	}
+
+	public void createDisplay(Level level, BlockPos pos) {
+		if (value > 0 && this.isCompleted() && !this.hasDisplay) {
+			this.hasDisplay = true;
+			Display.TextDisplay display = new Display.TextDisplay(EntityTypes.TEXT_DISPLAY, level);
+			display.setText(Component.literal(String.valueOf(value)).withStyle(ChatFormatting.WHITE));
+			display.setBackgroundColor(0);
+			display.setPos(Vec3.atBottomCenterOf(pos.above()).add(0, 0.01, 0));
+			// Center the display and make it rotate, if transformation scale is modified translation must be modified too
+			display.setBillboardConstraints(Display.BillboardConstraints.VERTICAL);
+			display.setTransformation(new Transformation(new Vector3f(-0.03125f, 0f, 0.3375f),
+				new Quaternionf(-0.707f, 0f, 0f, 0.707f), new Vector3f(2.5f), new Quaternionf()));
+			level.addFreshEntity(display);
+		}
 	}
 
 	@Override

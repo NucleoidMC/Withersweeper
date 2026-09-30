@@ -1,13 +1,29 @@
 package io.github.haykam821.withersweeper.game.board;
 
+import com.mojang.math.Transformation;
 import io.github.haykam821.withersweeper.game.field.Field;
 import io.github.haykam821.withersweeper.game.field.FieldVisibility;
 import io.github.haykam821.withersweeper.game.field.MineField;
 import io.github.haykam821.withersweeper.game.field.NumberField;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 import xyz.nucleoid.map_templates.MapTemplate;
+
+import java.util.Vector;
 
 public class Board {
 	private final BoardConfig config;
@@ -76,7 +92,18 @@ public class Board {
 		this.placedMines = true;
 		return true;
 	}
-	
+
+	public void uncoverMines() {
+		for (int x = 0; x < this.config.x; x++) {
+			for (int z = 0; z < this.config.z; z++) {
+				Field field = this.getField(x, z);
+				if (field instanceof MineField) {
+					field.setVisibility(FieldVisibility.UNCOVERED);
+				}
+			}
+		}
+	}
+
 	public void setField(int x, int z, Field field) {
 		this.fields[z][x] = field;
 	}
@@ -139,15 +166,17 @@ public class Board {
 		}
 	}
 
-	public void build(LevelAccessor level) {
+	public void build(Level level) {
 		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-
 		for (int x = 0; x < this.config.x; x++) {
 			for (int z = 0; z < this.config.z; z++) {
 				pos.set(x, 0, z);
 
 				Field field = this.getField(x, z);
 				if (field != null) {
+					if (field instanceof  NumberField numberField) {
+						numberField.createDisplay(level, pos);
+					}
 					level.setBlock(pos, field.getCoveredBlockState(), 2);
 				}
 			}

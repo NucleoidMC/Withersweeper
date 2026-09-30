@@ -61,7 +61,7 @@ public class Field {
 					for (var neighbor : BlockPos.betweenClosed(x - 1, y, z - 1, x + 1, y, z + 1)) {
 						var field = board.getField(neighbor.getX(), neighbor.getZ());
 						if (field != null && field.getVisibility() == FieldVisibility.COVERED) {
-							stack.add(new BlockPos(neighbor));
+							stack.add(neighbor.immutable());
 						}
 					}
 				}
